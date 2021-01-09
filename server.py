@@ -5,14 +5,13 @@ from flask import json
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
-from parse import *
 from functools import wraps
 from flask import request
 import re
+from cachelib import SimpleCache
 
 app = Flask(__name__)
 
-from werkzeug.contrib.cache import SimpleCache
 cache = SimpleCache()
 
 # URL templates fuer den Scraper
@@ -49,19 +48,20 @@ def get_stations():
     Ruft Liste aller Stationen ab und gibt
     Dict mit ID als Schlüssel und Name als Wert aus.
     """
+    result = None
     url = "https://www.kvb.koeln/haltestellen/overview/"
     r = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(r.text)
+    soup = BeautifulSoup(r.text, features="html.parser")
     #print(soup.prettify())
     mystations = []
     for a in soup.find_all("a"):
-        #print(a, a.get("href"), a.text)
+        # print(a, a.get("href"), a.text)
         href = a.get("href")
         if href is None:
             continue
-        result = parse(
-            URL_TEMPLATES["station_details"],
-            href)
+        if "/haltestellen/overview/" in href:
+            station_id = href.split("/")[3]
+            result = {"station_id": station_id}
         if result is None:
             continue
         mystations.append({
@@ -69,7 +69,7 @@ def get_stations():
             "name": a.text
             })
     # sort by id
-    mystations = sorted(mystations, key=lambda k: k['id'])
+    mystations.sort(key=lambda k: k.get("id"))
     station_dict = {}
     for s in mystations:
         station_dict[s["id"]] = s["name"]
@@ -80,26 +80,26 @@ def get_station_details(station_id):
     """
     Liest Details zu einer Station.
     """
+    result = {}
     url = "https://www.kvb.koeln/haltestellen/overview/%d/" % station_id
     r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text)
     details = {
         "station_id": station_id,
         "name": stations[station_id],
-        "line_ids": set()
+        "line_ids": []
     }
     div = soup.find("ul", class_="info-list")
     for a in div.find_all("a"):
         href = a.get("href")
         if href is None:
             continue
-        result = parse(
-            URL_TEMPLATES["line_details"],
-            href)
+        if "/haltestellen/showline/{id}/".format(id=station_id) in href:
+            line = href.split("/")[4]
+            result = {"line_ids": line}
         if result is None:
             continue
-        details["line_ids"].add(result["line_id"])
-    details["line_ids"] = sorted(list(details["line_ids"]))
+        details["line_ids"].append(result["line_ids"])
     return details
 
 
@@ -132,9 +132,7 @@ def get_line_details(station_id, line_id):
         href = a.get("href")
         if href is None:
             continue
-        result = parse(
-            URL_TEMPLATES["station_details"],
-            href)
+        result = station_details
         if result is None:
             continue
         details[station_key].append(int(result["station_id"]))
@@ -157,8 +155,9 @@ def get_departures(station_id):
         direction = direction.replace(u"\xa0", "")
         time = time.replace(u"\xa0", " ").strip().lower()
         if time == "sofort":
+            continue
             time = "0"
-        time = time.replace(" min", "")
+        # time = time.replace(" min", "")
         try:
             line_id = int(line_id)
         except:
@@ -221,6 +220,7 @@ def add_cors(resp):
     if app.debug:
         resp.headers['Access-Control-Max-Age'] = '1'
     return resp
+
 
 if __name__ == "__main__":
     stations = get_stations()
