@@ -142,6 +142,8 @@ def get_departures(station_id):
         line_id = line_id.replace(u"\xa0", "")
         direction = direction.replace(u"\xa0", "")
         time = time.replace(u"\xa0", " ").strip().lower()
+        if time == "sofort":
+            time = "Sofort"
         try:
             line_id = int(line_id)
         except:
