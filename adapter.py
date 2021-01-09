@@ -1,16 +1,11 @@
 # encoding: utf8
 
-from flask import Flask
-from flask import json
-from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 from functools import wraps
 from flask import request
 import re
 from cachelib import SimpleCache
-
-app = Flask(__name__)
 
 cache = SimpleCache()
 
@@ -25,8 +20,8 @@ URL_TEMPLATES = {
 
 # Die brauchen wir bei jeder Anfrage
 HEADERS = {
-    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1847.137 Safari/537.36"
-}
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1847.137 Safari/537.36"}
+
 
 def cached(timeout=5 * 60, key='view/%s'):
     def decorator(f):
@@ -44,15 +39,12 @@ def cached(timeout=5 * 60, key='view/%s'):
 
 
 def get_stations():
-    """
-    Ruft Liste aller Stationen ab und gibt
-    Dict mit ID als Schlüssel und Name als Wert aus.
-    """
+    # Ruft Liste aller Stationen ab und gibt
+    # Dict mit ID als Schlüssel und Name als Wert aus.
     result = None
     url = "https://www.kvb.koeln/haltestellen/overview/"
     r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text, features="html.parser")
-    #print(soup.prettify())
     mystations = []
     for a in soup.find_all("a"):
         # print(a, a.get("href"), a.text)
@@ -76,10 +68,8 @@ def get_stations():
     return station_dict
 
 
+# Liest Details zu einer Station.
 def get_station_details(station_id):
-    """
-    Liest Details zu einer Station.
-    """
     result = {}
     url = "https://www.kvb.koeln/haltestellen/overview/%d/" % station_id
     r = requests.get(url, headers=HEADERS)
@@ -103,10 +93,9 @@ def get_station_details(station_id):
     return details
 
 
+# Findet heraus, welche Stationen eine Linie anfährt
 def get_line_details(station_id, line_id):
-    """
-    Findet heraus, welche Stationen eine Linie anfährt
-    """
+    result = {}
     url = "https://www.kvb.koeln/haltestellen/showline/%d/%d/" % (
         station_id, line_id)
     r = requests.get(url, headers=HEADERS)
@@ -125,24 +114,23 @@ def get_line_details(station_id, line_id):
             count = count + 1
             if count == 2:
                 station_key = "stations_reverse"
-
         a = td.find("a")
         if a is None:
             continue
         href = a.get("href")
         if href is None:
             continue
-        result = station_details
+        if "/haltestellen/showline/{id}/".format(id=station_id) in href:
+            line = href.split("/")[4]
+            result = {"station_id": line}
         if result is None:
             continue
         details[station_key].append(int(result["station_id"]))
     return details
 
 
+# Aktuelle Abfahrten von einer Station laden
 def get_departures(station_id):
-    """
-    Aktuelle Abfahrten von einer Station laden
-    """
     url = "https://www.kvb.koeln/qr/%d/" % station_id
     r = requests.get(url, headers=HEADERS)
     soup = BeautifulSoup(r.text)
@@ -154,10 +142,6 @@ def get_departures(station_id):
         line_id = line_id.replace(u"\xa0", "")
         direction = direction.replace(u"\xa0", "")
         time = time.replace(u"\xa0", " ").strip().lower()
-        if time == "sofort":
-            continue
-            time = "0"
-        # time = time.replace(" min", "")
         try:
             line_id = int(line_id)
         except:
@@ -171,61 +155,4 @@ def get_departures(station_id):
     return departures
 
 
-@app.route("/")
-def index():
-    output = {
-        "datetime": datetime.utcnow(),
-        "methods": {
-            "station_list": "/stations/",
-            "station_details": "/stations/{station_id}/",
-            "departures": "/stations/{station_id}/departures/",
-            "line_details": "/stations/{station_id}/lines/{line_id}/"
-        }
-    }
-    return json.dumps(output)
-
-
-@app.route("/stations/")
-@cached()
-def stations_list():
-    return json.dumps(stations)
-
-
-@app.route("/stations/<int:station_id>/")
-@cached()
-def station_details(station_id):
-    details = get_station_details(station_id)
-    return json.dumps(details)
-
-
-@app.route("/stations/<int:station_id>/lines/<int:line_id>/")
-@cached()
-def line_stations(station_id, line_id):
-    details = get_line_details(station_id, line_id)
-    return json.dumps(details)
-
-
-@app.route("/stations/<int:station_id>/departures/")
-def station_departuress(station_id):
-    details = get_departures(station_id)
-    return json.dumps(details)
-
-# Add CORS header to every request
-@app.after_request
-def add_cors(resp):
-    resp.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin','*')
-    resp.headers['Access-Control-Allow-Credentials'] = 'true'
-    resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET'
-    resp.headers['Access-Control-Allow-Headers'] = request.headers.get('Access-Control-Request-Headers', 'Authorization' )
-    if app.debug:
-        resp.headers['Access-Control-Max-Age'] = '1'
-    return resp
-
-
-if __name__ == "__main__":
-    stations = get_stations()
-    stations_reverse = {}
-    for sid in stations.keys():
-        stations_reverse[stations[sid]] = sid
-    app.config["DEBUG"] = True
-    app.run()
+stations = get_stations()
