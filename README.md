@@ -9,7 +9,7 @@ kvb-api
 
 ## Start
 
-    python server.py
+    python app.py
 
 
 Ein paar Test-URLs:
@@ -17,5 +17,5 @@ Ein paar Test-URLs:
     http://127.0.0.1:5000/
     http://127.0.0.1:5000/stations/
     http://127.0.0.1:5000/stations/1/
-    http://127.0.0.1:5000/stations/2/
-    http://127.0.0.1:5000/stations/3/
+    http://127.0.0.1:5000/stations/2/departures
+ 
